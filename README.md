@@ -7,5 +7,5 @@ CSE548 Spring 2021 Project 2: Machine Learning Security Project
 - Ryan Schmidt
 - Kirtus Leyba
 
-![Eye of Sauron](documents/sauron.jpg | width=250)
+![](documents/sauron.jpg | width=250)
 
