@@ -1,6 +1,6 @@
 #!/bin/bash
 
-sudo apt update
-sudo apt install software-properties-common
-sudo apt install python3.9
-python39 -m venv venv
+sudo apt update -y && \
+sudo apt install -y software-properties-common && \
+sudo apt install -y python3.9 && \
+python3.9 -m venv venv
