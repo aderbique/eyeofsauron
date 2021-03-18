@@ -21,10 +21,24 @@ The all seeing eye of traffic in a network.
 |`minutes/`|Contains all minutes documents of meetings|
 |`documents/`|Contains Midterm, final report, and media related to project|
 
-# Project Tasks
+## Setting up Project Environment
+```
+eyeofsauron$ cd project
+project$ ./set_environment.sh
+project$ source venv/bin/activate
+```
 
+# Project Tasks
 ## Task 1: Anomaly Detection Accuracy with Unknown Attacks 
 ### Instructions for Running Code
+```
+project$ source venv/bin/activate
+(venv) $ python task1/main.py
+```
 
 ## Task 3: Unsupervised Training for Detecting Network Attacks
 ### Instructions for Running Code
+```
+project$ source venv/bin/activate
+(venv) $ python task3/main.py
+```
