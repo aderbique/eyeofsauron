@@ -45,4 +45,29 @@ sc = StandardScaler()
 x_train = sc.fit_transform(xtrain)
 x_test =  sc.fit_transform(xtest)
 
-# Creating FNN
+# Building FNN Training Module
+from keras.models import Sequential
+from keras.layers import Dense
+
+# Initialize the ANN
+classifier = Sequential()
+
+# Build neural network using 6 nodes as input layer
+classifier.add(Dense(units = 6, kernel_initializer = 'uniform', activation = 'relu', input_dim = len(x_train[0])))
+
+# Add second hidden layer
+classifier.add(Dense(units=6, kernel_initializer = 'uniform', activation = 'relu'))
+
+# Add output layer, 1 node
+classifier.add(Dense(units=1, kernel_initializer = 'uniform', activation = 'sigmoid'))
+
+# FNN is constructed, time to compile NN. Use gradient decent algorithm 'adam'
+classifier.compile(optimizer = 'adam',loss = 'binary_crossentropy',metrics=['accuracy'])
+
+# Run training with batch size equal to 10 and 10 epochs will be performed
+classiferHistory = classifier.fit(xtrain,ytrain,batch_size=10,epochs=10)
+
+# Evaluate training results, showing loss and accuracy of training on the given dataset
+loss, accuracy = classifier.evaluate(xtrain,ytrain)
+print("Print the loss and accuracy of the model on the dataset")
+print("Loss [0,1]: %.4f" % (loss), "Accuracy [0,1]: %.4f" % (accuracy))
