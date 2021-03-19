@@ -11,7 +11,7 @@ CSE548 Spring 2021 Project 2: Machine Learning Security Project
 The all seeing eye of traffic in a network. 
 
 ## Deliverables
-- [Midterm Report](documents/midterm_report.pdf) ([Overleaf](https://www.overleaf.com/project/604d1a7de06c7efd5b9a6682))
+- [Midterm Report](documents/midterm_report.pdf) ([Overleaf](https://www.overleaf.com/project/604d1a7de06c7efd5b9a6682), [Read-Only](https://www.overleaf.com/read/phcnysnrdqyy))
 
 
 ## Directory Structure
