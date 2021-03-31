@@ -9,6 +9,8 @@ import pandas as pd
 from pandas import DataFrame
 from sklearn.model_selection import train_test_split
 
+# minisom repo, including helpful examples: https://github.com/JustGlowing/minisom
+
 def load_data(path: str, train_size: float) -> Tuple[DataFrame, DataFrame]:
     """ Process the dataset into training and test data.
 
