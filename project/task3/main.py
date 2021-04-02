@@ -1,5 +1,7 @@
 import argparse
 from collections import Counter, defaultdict
+import csv
+import json
 import math
 import pickle
 from typing import Any, Dict, Tuple
@@ -16,15 +18,19 @@ from sklearn.model_selection import train_test_split
 Coordinate = Tuple[int, int]
 
 class Model:
-    def __init__(self, som: MiniSom, labels_map: Dict[Coordinate, Counter]):
+    def __init__(self, som: MiniSom, labels_map: Dict[Coordinate, Counter], x_dim: int, y_dim: int):
         """ Create a MiniSom model with label data
 
         :param som: MiniSom instance
         :param labels_map: Label map derived from MiniSom instance
+        :param x_dim: X dimension of map
+        :param y_dim: Y dimension of map
         """
         self.som = som
         self.map = labels_map
         self.labels = {}
+        self.x = x_dim
+        self.y = y_dim
 
         for coord, ctr in self.map.items():
             num_benign = ctr["BENIGN"]
@@ -132,7 +138,7 @@ def train_som(dataset: DataFrame, x_dim: int, y_dim: int, *, verbose: bool = Fal
     model = MiniSom(x_dim, y_dim, num_cols, **kwargs)
     model.train(dataset, num_rows, verbose=verbose)
 
-    return Model(model, model.labels_map(dataset, labels))
+    return Model(model, model.labels_map(dataset, labels), x_dim, y_dim)
 
 def test_som(model: Model, dataset: DataFrame, *, verbose: bool = False) -> dict:
     """ Test the SOM model on the given dataset.
@@ -155,7 +161,14 @@ def test_som(model: Model, dataset: DataFrame, *, verbose: bool = False) -> dict
         "FalsePositive": 0,
         "TrueNegative": 0,
         "FalseNegative": 0,
-        "Map": defaultdict(Counter)
+        "FalsePositiveRate": 0,
+        "FalseNegativeRate": 0,
+        "TestMap": defaultdict(Counter),
+        "TrainMap": model.map,
+        "XDim": model.x,
+        "YDim": model.y,
+        "QuantizationError": 0,
+        "TopographicError": 0
     }
 
     total = dataset.shape[0]
@@ -177,11 +190,16 @@ def test_som(model: Model, dataset: DataFrame, *, verbose: bool = False) -> dict
             prefix = "False"
         key = prefix + label_map[actual_label]
         stats[key] += 1
-        stats["Map"][coord][actual_label] += 1
-        stats["Map"][coord][key] += 1
+        stats["TestMap"][coord][actual_label] += 1
+        stats["TestMap"][coord][key] += 1
 
     if verbose:
-        print()
+        print("\nCalculating error statistics...")
+
+    stats["QuantizationError"] = model.som.quantization_error(dataset.to_numpy())
+    stats["TopographicError"] = model.som.topographic_error(dataset.to_numpy())
+    stats["FalsePositiveRate"] = stats["FalsePositive"] / (stats["FalsePositive"] + stats["TrueNegative"])
+    stats["FalseNegativeRate"] = stats["FalseNegative"] / (stats["FalseNegative"] + stats["TruePositive"])
 
     return stats
 
@@ -236,7 +254,20 @@ if __name__ == "__main__":
 
     # output results
     for key, value in results.items():
-        if key == "Map":
-            continue
+        if key.endswith("Map"):
+            with open(f"task3/{key}.csv", "wt") as f:
+                fieldnames = ["X", "Y", "BENIGN", "PortScan"]
+                if key == "TestMap":
+                    fieldnames.extend(["TruePositive", "TrueNegative", "FalsePositive", "FalseNegative"])
+                writer = csv.DictWriter(f, fieldnames=fieldnames)
+                writer.writeheader()
+                for coord, row in value.items():
+                    row["X"], row["Y"] = coord
+                    writer.writerow(row)
+        else:
+            print(key, value)
 
-        print(key, value)
+    del results["TrainMap"]
+    del results["TestMap"]
+    with open("task3/results.json", "wt") as f:
+        json.dump(results, f, indent=4, sort_keys=True)
