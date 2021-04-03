@@ -1,0 +1,12 @@
+{
+    "FalseNegative": 34,
+    "FalseNegativeRate": 0.00042760303346622565,
+    "FalsePositive": 87,
+    "FalsePositiveRate": 0.0013653269722697383,
+    "QuantizationError": 0.4685795507464623,
+    "TopographicError": 0.11647374226789729,
+    "TrueNegative": 63634,
+    "TruePositive": 79479,
+    "XDim": 44,
+    "YDim": 44
+}

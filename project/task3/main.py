@@ -1,11 +1,14 @@
 import argparse
 from collections import Counter, defaultdict
+import csv
+import json
 import math
 import pickle
 from typing import Any, Dict, Tuple
 
 from minisom import MiniSom
 import pandas as pd
+import numpy as np
 from pandas import DataFrame
 from sklearn.model_selection import train_test_split
 
@@ -15,15 +18,19 @@ from sklearn.model_selection import train_test_split
 Coordinate = Tuple[int, int]
 
 class Model:
-    def __init__(self, som: MiniSom, labels_map: Dict[Coordinate, Counter]):
+    def __init__(self, som: MiniSom, labels_map: Dict[Coordinate, Counter], x_dim: int, y_dim: int):
         """ Create a MiniSom model with label data
 
         :param som: MiniSom instance
         :param labels_map: Label map derived from MiniSom instance
+        :param x_dim: X dimension of map
+        :param y_dim: Y dimension of map
         """
         self.som = som
         self.map = labels_map
         self.labels = {}
+        self.x = x_dim
+        self.y = y_dim
 
         for coord, ctr in self.map.items():
             num_benign = ctr["BENIGN"]
@@ -33,7 +40,8 @@ class Model:
             elif num_scan > num_benign:
                 self.labels[coord] = "PortScan"
             else:
-                self.labels[coord] = None
+                # if we're split 50/50 between benign traffic and port scans, label as benign
+                self.labels[coord] = "BENIGN"
 
     def winner(self, data_point: Any) -> Coordinate:
         """ Determine the coordinate that this data point maps to in the SOM
@@ -43,11 +51,12 @@ class Model:
         """
         return self.som.winner(data_point)
 
-def load_data(path: str, train_size: float) -> Tuple[DataFrame, DataFrame]:
+def load_data(path: str, train_size: float, *, verbose: bool = False) -> Tuple[DataFrame, DataFrame]:
     """ Process the dataset into training and test data.
 
     :param path: Path to dataset file
     :param train_size: Amount of dataset used for training data, as a float in the range [0, 1]
+    :param verbose: Display verbose output if True
     :return: A tuple containing, in order, the training dataset and the test dataset
     """
     names = ["Destination Port", "Flow Duration", "Total Fwd Packets", "Total Backward Packets",
@@ -67,9 +76,41 @@ def load_data(path: str, train_size: float) -> Tuple[DataFrame, DataFrame]:
              "Subflow Bwd Packets", "Subflow Bwd Bytes", "Init_Win_bytes_forward", "Init_Win_bytes_backward",
              "act_data_pkt_fwd", "min_seg_size_forward", "Active Mean", "Active Std", "Active Max", "Active Min",
              "Idle Mean", "Idle Std", "Idle Max", "Idle Min", "Label"]
+    if verbose:
+        print("Loading dataset...")
+
     data = pd.read_csv(path, header=0, names=names)
+    # data cleaning: some rows have NaN or Infinity values which break things later on
+    # convert all such values to 0 (the columns containing these are e.g. Flow Packets/s when there are no
+    # backwards flows or the like)
+    data.replace((np.inf, -np.inf), np.nan, inplace=True)
+    data.fillna(0, inplace=True)
+    # data normalization
+    drop_cols = set()
+    num_cols = len(data.columns[:-1])
+    width = len(str(num_cols))
+    if verbose:
+        print("Normalizing dataset columns...")
+
+    for i, col in enumerate(data.columns[:-1]):
+        if verbose:
+            print("\r [ {0:>{2}} / {1} ] {3:>3.0%} ".format(i+1, num_cols, width, (i+1) / num_cols), end="")
+        if data[col].std() == 0:
+            # every value in this column is the same, so drop it from the dataset later on
+            drop_cols.add(col)
+            continue
+        data[col] = (data[col] - data[col].mean()) / data[col].std()
+    if verbose:
+        print()
+
+    for col in drop_cols:
+        del data[col]
+
     # split dataset between training and testing data,
     # then drop the Label column from the training data (as SOM is unsupervised)
+    if verbose:
+        print("Splitting dataset into training and testing data...")
+
     train, test = train_test_split(data, train_size=train_size)
     train.reset_index(inplace=True, drop=True)
     test.reset_index(inplace=True, drop=True)
@@ -86,18 +127,25 @@ def train_som(dataset: DataFrame, x_dim: int, y_dim: int, *, verbose: bool = Fal
     :param kwargs: Additional parameters passed to MiniSom to control SOM behavior, e.g. sigma or learning_rate
     :return: The trained model
     """
+    if verbose:
+        print("Training model...")
+
     # remove the label from the dataset to have proper unsupervised learning
     labels = dataset.pop("Label")
-    model = MiniSom(x_dim, y_dim, dataset.shape[1], **kwargs)
-    model.train(dataset.to_numpy(), dataset.shape[0], verbose=verbose)
+    num_cols = dataset.shape[1]
+    num_rows = dataset.shape[0]
+    dataset = dataset.to_numpy()
+    model = MiniSom(x_dim, y_dim, num_cols, **kwargs)
+    model.train(dataset, num_rows, verbose=verbose)
 
-    return Model(model, model.labels_map(dataset.to_numpy(), labels))
+    return Model(model, model.labels_map(dataset, labels), x_dim, y_dim)
 
-def test_som(model: Model, dataset: DataFrame) -> dict:
+def test_som(model: Model, dataset: DataFrame, *, verbose: bool = False) -> dict:
     """ Test the SOM model on the given dataset.
 
     :param model: The trained model to test
     :param dataset: Labelled dataset of test data
+    :param verbose: Display verbose output if True
     :return: Dict containing test results
     """
     labels = dataset.pop("Label")
@@ -113,12 +161,28 @@ def test_som(model: Model, dataset: DataFrame) -> dict:
         "FalsePositive": 0,
         "TrueNegative": 0,
         "FalseNegative": 0,
-        "Map": defaultdict(Counter)
+        "FalsePositiveRate": 0,
+        "FalseNegativeRate": 0,
+        "TestMap": defaultdict(Counter),
+        "TrainMap": model.map,
+        "XDim": model.x,
+        "YDim": model.y,
+        "QuantizationError": 0,
+        "TopographicError": 0
     }
 
-    for i, row in enumerate(dataset):
-        coord = model.winner(row)
-        expected_label = model.labels[coord]
+    total = dataset.shape[0]
+    width = len(str(total))
+
+    if verbose:
+        print("Testing model...")
+
+    for i, row in dataset.iterrows():
+        if verbose:
+            print("\r [ {0:>{2}} / {1} ] {3:>3.0%} ".format(i+1, total, width, (i+1) / total), end="")
+        coord = model.winner(row.to_numpy())
+        # if we don't have a match, assume that the traffic is benign
+        expected_label = model.labels.get(coord, "BENIGN")
         actual_label = labels[i]
         if actual_label == expected_label:
             prefix = "True"
@@ -126,8 +190,16 @@ def test_som(model: Model, dataset: DataFrame) -> dict:
             prefix = "False"
         key = prefix + label_map[actual_label]
         stats[key] += 1
-        stats["Map"][coord][actual_label] += 1
-        stats["Map"][coord][key] += 1
+        stats["TestMap"][coord][actual_label] += 1
+        stats["TestMap"][coord][key] += 1
+
+    if verbose:
+        print("\nCalculating error statistics...")
+
+    stats["QuantizationError"] = model.som.quantization_error(dataset.to_numpy())
+    stats["TopographicError"] = model.som.topographic_error(dataset.to_numpy())
+    stats["FalsePositiveRate"] = stats["FalsePositive"] / (stats["FalsePositive"] + stats["TrueNegative"])
+    stats["FalseNegativeRate"] = stats["FalseNegative"] / (stats["FalseNegative"] + stats["TruePositive"])
 
     return stats
 
@@ -155,11 +227,15 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # load the dataset
-    train_data, test_data = load_data(args.dataset, train_size=args.split)
+    train_data, test_data = load_data(args.dataset, train_size=args.split, verbose=args.verbose)
 
     # generate our SOM
     if args.model:
-        som = pickle.load(args.model)
+        if args.verbose:
+            print("Loading saved model...")
+
+        with open(args.model, "rb") as f:
+            som = pickle.load(f)
     else:
         # SOM grid recommended to be approximately 5 * sqrt(N) neurons where N is the number of data rows
         auto_dim = int(math.ceil(math.sqrt(5 * math.sqrt(train_data.shape[0]))))
@@ -167,13 +243,31 @@ if __name__ == "__main__":
         y = args.y if args.y else auto_dim
         som = train_som(train_data, x, y, verbose=args.verbose)
         if args.output:
-            pickle.dump(som, args.output)
+            if args.verbose:
+                print("Saving model...".format(args.output))
+
+            with open(args.output, "wb") as f:
+                pickle.dump(som, f)
 
     # test our SOM
-    results = test_som(som, test_data)
+    results = test_som(som, test_data, verbose=args.verbose)
 
     # output results
     for key, value in results.items():
-        if key == "Map":
-            continue
-        print(key, value)
+        if key.endswith("Map"):
+            with open(f"task3/{key}.csv", "wt") as f:
+                fieldnames = ["X", "Y", "BENIGN", "PortScan"]
+                if key == "TestMap":
+                    fieldnames.extend(["TruePositive", "TrueNegative", "FalsePositive", "FalseNegative"])
+                writer = csv.DictWriter(f, fieldnames=fieldnames)
+                writer.writeheader()
+                for coord, row in value.items():
+                    row["X"], row["Y"] = coord
+                    writer.writerow(row)
+        else:
+            print(key, value)
+
+    del results["TrainMap"]
+    del results["TestMap"]
+    with open("task3/results.json", "wt") as f:
+        json.dump(results, f, indent=4, sort_keys=True)
