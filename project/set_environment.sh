@@ -8,7 +8,7 @@ source venv/bin/activate
 pip install -r requirements.txt
 
 echo "Obtaining Data Sets"
-mkdir -p datasets
+mkdir -p datasets artifacts
 echo "Downloading KDD Dataset for Task 1"
 wget http://205.174.165.80/CICDataset/NSL-KDD/Dataset/NSL-KDD.zip -P datasets/
 echo "Extracting KDD Dataset for Task 1"

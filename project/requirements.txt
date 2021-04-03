@@ -14,3 +14,4 @@ six==1.15.0
 sklearn==0.0
 threadpoolctl==2.1.0
 Keras==2.4.3
+MiniSom==2.2.8

@@ -135,7 +135,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run SOM to detect port scans")
     parser.add_argument("-d", "--dataset",
                         help="Dataset containing training and testing data",
-                        default="datasets/Friday-WorkingHours-Afternoon-PortScan.pcap_ISCX.csv")
+                        default="datasets/ids/MachineLearningCVE/Friday-WorkingHours-Afternoon-PortScan.pcap_ISCX.csv")
     parser.add_argument("-s", "--split",
                         help="Percentage of the dataset we will use to train the SOM in range [0, 1]",
                         default=0.5,
