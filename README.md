@@ -36,6 +36,13 @@ project$ source venv/bin/activate
 (venv) $ python task1/main.py
 ```
 
+## Task 2: FNN vs. RNN
+### Instructions for Running Code
+```
+project$ source venv/bin/activate
+(venv) $ python task2/main.py
+```
+
 ## Task 3: Unsupervised Training for Detecting Network Attacks
 ### Instructions for Running Code
 ```
